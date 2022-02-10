@@ -64,7 +64,7 @@ class InventoryModule(BaseInventoryPlugin):
 
     def print_verbose_message(self, msg):
         if self.verbose:
-            print(f"morpheus_inventory: {msg}")
+            print("morpheus_inventory: %s" % msg)
     
     def _set_version_from_morpheus(self):
 

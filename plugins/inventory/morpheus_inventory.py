@@ -271,7 +271,11 @@ class InventoryModule(BaseInventoryPlugin):
 
     def parse(self, inventory, loader, path, cache):
         '''Return dynamic inventory from source '''
+        super(InventoryModule, self).__init__()
         super(InventoryModule, self).parse(inventory, loader, path, cache)
+
+        if self.display.verbosity > 1:
+            print("HELLO THERE")
 
         if os.environ['PWD'].startswith('/var/opt/morpheus'):
             self.morpheus_env = True

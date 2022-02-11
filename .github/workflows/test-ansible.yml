@@ -11,8 +11,15 @@ jobs:
       - name: Prerequisite install
         run: |
           sudo apt remove ansible
-          sudo pip install 'ansible-core<2.12'
-          
+          sudo pip install 'ansible-core<2.12' flake8 ansible-lint
+      
+      - name: Lint collection
+        run: |
+          cd $GITHUB_WORKSPACE
+          ls
+          ansible-lint 
+          find . -name *.py | xargs -n 1 flake8 --max-line-length 160
+      
       - name: Build collection
         run: |
           cd $GITHUB_WORKSPACE

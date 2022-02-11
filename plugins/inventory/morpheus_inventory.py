@@ -61,11 +61,10 @@ class InventoryModule(BaseInventoryPlugin):
         self.groups = None
         self.verbose = False
 
-
     def print_verbose_message(self, msg):
         if self.verbose:
             print("morpheus_inventory: %s" % msg)
-    
+
     def _set_version_from_morpheus(self):
 
         headers = {'Authorization': "BEARER %s" % self.morpheus_token,
@@ -194,7 +193,7 @@ class InventoryModule(BaseInventoryPlugin):
             else:
                 group = platform
             self.inventory.add_group(group)
-            self.print_verbose_message("Matched %s with platform %s, adding to group %s" % (container['name'], group, group))
+            self.print_verbose_message("Matched %s with platform %s, adding to group %s" % (container['externalHostname'], group, group))
         container_hostname = container['externalHostname']
         self.inventory.add_host(
             host=container_hostname,
@@ -265,7 +264,8 @@ class InventoryModule(BaseInventoryPlugin):
                     for apptier in app['appTiers']:
                         if searchstring['apptier'] in apptier['tier']['name']:
                             for instance in apptier['appInstances']:
-                                self.print_verbose_message("Matched %s in app %s and tier %s, adding to group %s" % (instance['name'], app['name'], apptier['tier']['name'], group))
+                                self.print_verbose_message("Matched %s in app %s and tier %s, adding to group %s" %
+                                                           (instance['name'], app['name'], apptier['tier']['name'], group))
                                 self._add_morpheus_instance(group, instance['instance'])
         elif searchtype == "cloud":
             for instance in rawresponse['instances']:

@@ -59,6 +59,11 @@ class InventoryModule(BaseInventoryPlugin):
         self.extravars = None
         self.workspace = ""
         self.groups = None
+        self.verbose = False
+
+    def print_verbose_message(self, msg):
+        if self.verbose:
+            print("morpheus_inventory: %s" % msg)
 
     def _set_version_from_morpheus(self):
 
@@ -74,8 +79,10 @@ class InventoryModule(BaseInventoryPlugin):
     def _set_morpheus_oldmetadata(self):
         if version.parse(self.morpheus_version) < version.parse("4.2.5"):
             self.morpheus_oldmetadata = True
+            self.print_verbose_message("Using old metadata model")
         if (version.parse(self.morpheus_version) >= version.parse("5.0")) and (version.parse(self.morpheus_version) < version.parse("5.2.1")):
             self.morpheus_oldmetadata = True
+            self.print_verbose_message("Using old metadata model")
 
     def _get_data_from_morpheus(self, searchtype, searchstring=None):
         headers = {'Authorization': "BEARER %s" % self.morpheus_token,
@@ -101,6 +108,7 @@ class InventoryModule(BaseInventoryPlugin):
                     cloud_is_numeric = False
 
             if not cloud_is_numeric:
+                self.print_verbose_message("Searching for cloud by name")
                 cloudurl = self.morpheus_api + "/zones?max=-1"
                 cloudr = getattr(requests, method)(cloudurl, headers=headers, verify=verify)
                 cloudoutput = cloudr.json()
@@ -109,6 +117,7 @@ class InventoryModule(BaseInventoryPlugin):
                 for c in cloudoutput['zones']:
                     if c['code'] == searchstring:
                         cloudid = c['id']
+                        self.print_verbose_message("Cloud is detected as %s" % cloudid)
                         break
                 if cloudid is None:
                     raise AnsibleParserError("Could not find a cloud with code: %s" % searchstring)
@@ -154,11 +163,13 @@ class InventoryModule(BaseInventoryPlugin):
                     continue
                 group = "%s_%s" % (tag['name'], tag['value'])
                 self.inventory.add_group(group)
+                self.print_verbose_message("Found %s with tag %s=%s, adding to group %s" % (instance['name'], tag['name'], tag['value'], group))
                 self._add_morpheus_instance(group, instance)
         else:
             for tag in instance['tags']:
                 group = "%s_%s" % (tag['name'], tag['value'])
                 self.inventory.add_group(group)
+                self.print_verbose_message("Found %s with tag %s=%s, adding to group %s" % (instance['name'], tag['name'], tag['value'], group))
                 self._add_morpheus_instance(group, instance)
 
     def _get_server_details(self, serverid):
@@ -182,6 +193,7 @@ class InventoryModule(BaseInventoryPlugin):
             else:
                 group = platform
             self.inventory.add_group(group)
+            self.print_verbose_message("Matched %s with platform %s, adding to group %s" % (container['externalHostname'], group, group))
         container_hostname = container['externalHostname']
         self.inventory.add_host(
             host=container_hostname,
@@ -219,6 +231,7 @@ class InventoryModule(BaseInventoryPlugin):
             self._add_morpheus_container(group, containerid, containerdata['containers'][0], platform_query)
 
     def _filter_morpheus_output(self, rawresponse, group, searchtype, searchstring):
+        self.print_verbose_message("Found a total of %s instances" % rawresponse['meta']['total'])
         if self.morpheus_env:
             try:
                 for file in os.listdir(self.workspace):
@@ -232,14 +245,17 @@ class InventoryModule(BaseInventoryPlugin):
                 if version.parse(self.morpheus_version) > version.parse("5.0"):
                     for label in instance['labels']:
                         if str(searchstring).lower() == str(label).lower():
+                            self.print_verbose_message("Matched %s with label %s, adding to group %s" % (instance['name'], label, group))
                             self._add_morpheus_instance(group, instance)
                 else:
                     for tag in instance['tags']:
                         if str(searchstring).lower() == str(tag).lower():
+                            self.print_verbose_message("Matched %s with label %s, adding to group %s" % (instance['name'], tag, group))
                             self._add_morpheus_instance(group, instance)
         elif searchtype == "name":
             for instance in rawresponse['instances']:
                 if searchstring in instance['name']:
+                    self.print_verbose_message("Matched %s with name %s, adding to group %s" % (instance['name'], searchstring, group))
                     self._add_morpheus_instance(group, instance)
         elif searchtype == "app":
             for app in rawresponse['apps']:
@@ -248,6 +264,8 @@ class InventoryModule(BaseInventoryPlugin):
                     for apptier in app['appTiers']:
                         if searchstring['apptier'] in apptier['tier']['name']:
                             for instance in apptier['appInstances']:
+                                self.print_verbose_message("Matched %s in app %s and tier %s, adding to group %s" %
+                                                           (instance['name'], app['name'], apptier['tier']['name'], group))
                                 self._add_morpheus_instance(group, instance['instance'])
         elif searchtype == "cloud":
             for instance in rawresponse['instances']:
@@ -257,6 +275,7 @@ class InventoryModule(BaseInventoryPlugin):
             for instance in rawresponse['instances']:
                 for tag in instance['tags']:
                     if searchstring['tagName'] == tag['name'] and searchstring['tagValue'] == tag['value']:
+                        self.print_verbose_message("Matched %s with tag %s=%s, adding to group %s" % (instance['name'], tag['name'], tag['value'], group))
                         self._add_morpheus_instance(group, instance)
 
     def verify_file(self, path):
@@ -271,9 +290,14 @@ class InventoryModule(BaseInventoryPlugin):
 
     def parse(self, inventory, loader, path, cache):
         '''Return dynamic inventory from source '''
+        super(InventoryModule, self).__init__()
         super(InventoryModule, self).parse(inventory, loader, path, cache)
 
+        if self.display.verbosity > 1:
+            self.verbose = True
+
         if os.environ['PWD'].startswith('/var/opt/morpheus'):
+            self.print_verbose_message("Running from Morpheus environment")
             self.morpheus_env = True
         config_data = self._read_config_data(path)
 
@@ -311,13 +335,16 @@ class InventoryModule(BaseInventoryPlugin):
             raise AnsibleParserError("Options missing: %s" % e)
 
         self._set_version_from_morpheus()
+        self.print_verbose_message("Morpheus version detected as: %s" % self.morpheus_version)
         self._set_morpheus_oldmetadata()
 
         for group in self.groups:
             if group['searchtype'] == 'cloud':
+                self.print_verbose_message("Processing cloud %s" % group['searchstring'])
                 rawoutput = self._get_data_from_morpheus(searchtype=group['searchtype'], searchstring=group['searchstring'])
                 self._filter_morpheus_output(rawoutput, None, group['searchtype'], group['searchstring'])
             else:
+                self.print_verbose_message("Processing group %s" % group['name'])
                 self.inventory.add_group(group['name'])
                 rawoutput = self._get_data_from_morpheus(searchtype=group['searchtype'])
                 self._filter_morpheus_output(rawoutput, group['name'], group['searchtype'], group['searchstring'])

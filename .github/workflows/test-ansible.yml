@@ -11,7 +11,7 @@ jobs:
       - name: Prerequisite install
         run: |
           sudo apt remove ansible
-          sudo pip install 'ansible-core<2.12' flake8 ansible-lint
+          sudo pip install ansible-core flake8 ansible-lint
       
       - name: Lint collection
         run: |
